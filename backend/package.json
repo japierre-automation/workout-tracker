@@ -12,6 +12,7 @@
     "test:engine": "pnpm --filter @wt/engine test",
     "test:api": "pnpm --filter @wt/api test",
     "dev": "pnpm --filter @wt/api dev",
+    "start": "pnpm --filter @wt/api start",
     "lint": "pnpm -r lint"
   },
   "devDependencies": {
