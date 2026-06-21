@@ -1,0 +1,87 @@
+// Workout Tracker — API data model.
+// Weights are stored in lb as exact Decimals; dates are calendar dates (never
+// instants). Prescribed weights are NOT primary data — they are derived by
+// @wt/engine from ExerciseRevision params + the ordered SessionLog list, and only
+// snapshotted onto each log at write time as a historical record.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Program {
+  id         String    @id @default(uuid())
+  name       String
+  isActive   Boolean   @default(false)
+  startDate  DateTime  @db.Date
+  archivedAt DateTime? // P2 archive; null = live. Column kept now for forward-compat.
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  days       Day[]
+}
+
+model Day {
+  id        String     @id @default(uuid())
+  programId String
+  program   Program    @relation(fields: [programId], references: [id], onDelete: Cascade)
+  weekday   Int // ISO: 0 = Monday … 6 = Sunday
+  label     String?
+  order     Int
+  exercises Exercise[]
+
+  @@unique([programId, weekday])
+  @@index([programId, order])
+}
+
+model Exercise {
+  id        String             @id @default(uuid())
+  dayId     String
+  day       Day                @relation(fields: [dayId], references: [id], onDelete: Cascade)
+  name      String
+  order     Int
+  revisions ExerciseRevision[]
+  logs      SessionLog[]
+
+  @@index([dayId, order])
+}
+
+model ExerciseRevision {
+  id                 String   @id @default(uuid())
+  exerciseId         String
+  exercise           Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  effectiveFromIndex Int // occurrence index this revision applies from
+  startWeightLb      Decimal  @db.Decimal(7, 3) // working weight AT effectiveFromIndex
+  sets               Int
+  reps               Int
+  incrementLb        Decimal  @db.Decimal(6, 3)
+  failureMultiplier  Decimal  @default(0.900) @db.Decimal(4, 3)
+  roundingStepLb     Decimal  @db.Decimal(6, 3)
+  createdAt          DateTime @default(now())
+
+  @@unique([exerciseId, effectiveFromIndex])
+}
+
+model SessionLog {
+  id                 String    @id @default(uuid())
+  exerciseId         String
+  exercise           Exercise  @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  date               DateTime  @db.Date
+  occurrenceIndex    Int
+  prescribedWeightLb Decimal   @db.Decimal(7, 3) // engine snapshot at write time
+  status             LogStatus // DONE | FAILED — MISSED is derived, never stored
+  manualNextWeightLb Decimal?  @db.Decimal(7, 3) // only valid with FAILED
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([exerciseId, occurrenceIndex])
+  @@index([date])
+}
+
+enum LogStatus {
+  DONE
+  FAILED
+}
